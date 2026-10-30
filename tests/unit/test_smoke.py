@@ -16,3 +16,8 @@ def test_settings_defaults() -> None:
 def test_main_runs(capsys) -> None:
     main()
     assert "SC-Research-Agentic-RAG" in capsys.readouterr().out
+
+
+def test_openalex_key_is_read_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("OPENALEX_API_KEY", "abc")
+    assert Settings(_env_file=None).openalex_api_key == "abc"
