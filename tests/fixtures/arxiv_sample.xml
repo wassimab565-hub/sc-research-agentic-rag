@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <title>ArXiv Query</title>
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v2</id>
+    <published>2024-01-02T10:00:00Z</published>
+    <title>Improving Retrieval
+      Quality in GraphRAG</title>
+    <summary>We study retrieval.
+      It works.</summary>
+    <author><name>Alice Martin</name></author>
+    <author><name>Bob Karim</name></author>
+    <arxiv:doi>10.1000/ABC.123</arxiv:doi>
+    <link href="http://arxiv.org/abs/2401.00001v2" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2401.00001v2" rel="related" type="application/pdf"/>
+    <category term="cs.IR"/>
+    <category term="cs.CL"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/hep-th/9901001v1</id>
+    <published>1999-01-05T00:00:00Z</published>
+    <title>Old Style Identifier</title>
+    <summary>Short.</summary>
+    <author><name>Carol Dupont</name></author>
+    <category term="hep-th"/>
+  </entry>
+</feed>

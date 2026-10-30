@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "pydantic-settings>=2.2",
     "python-dotenv>=1.0",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
