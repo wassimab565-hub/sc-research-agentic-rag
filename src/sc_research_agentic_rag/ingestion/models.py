@@ -22,6 +22,7 @@ class Paper(BaseModel):
     url: str
     pdf_url: str | None = None
     categories: list[str] = Field(default_factory=list)
+    also_found_as: list[str] = Field(default_factory=list)
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("title", "abstract")

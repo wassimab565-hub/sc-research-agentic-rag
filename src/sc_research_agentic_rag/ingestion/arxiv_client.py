@@ -1,13 +1,21 @@
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from datetime import date
 
 import httpx
 
 from sc_research_agentic_rag.ingestion.errors import IngestionError
+from sc_research_agentic_rag.ingestion.http import (
+    USER_AGENT,
+    RateLimiter,
+    default_sleep,
+    get_with_retry,
+)
 from sc_research_agentic_rag.ingestion.models import Paper, PaperSource
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
+ARXIV_MIN_INTERVAL = 3.0
 _NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 _VERSION_SUFFIX = re.compile(r"v\d+$")
 
@@ -18,9 +26,17 @@ class ArxivClient:
         client: httpx.Client | None = None,
         base_url: str = ARXIV_API_URL,
         timeout: float = 30.0,
+        rate_limiter: RateLimiter | None = None,
+        max_retries: int = 3,
+        backoff: float = 1.0,
+        sleep: Callable[[float], None] = default_sleep,
     ) -> None:
         self._client = client or httpx.Client(timeout=timeout)
         self._base_url = base_url
+        self._rate_limiter = rate_limiter or RateLimiter(ARXIV_MIN_INTERVAL, sleep=sleep)
+        self._max_retries = max_retries
+        self._backoff = backoff
+        self._sleep = sleep
 
     def search(self, query: str, max_results: int = 10, start: int = 0) -> list[Paper]:
         if not query.strip():
@@ -35,8 +51,16 @@ class ArxivClient:
             "sortBy": "relevance",
         }
         try:
-            response = self._client.get(self._base_url, params=params)
-            response.raise_for_status()
+            response = get_with_retry(
+                self._client,
+                self._base_url,
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+                max_retries=self._max_retries,
+                backoff=self._backoff,
+                sleep=self._sleep,
+                before_request=self._rate_limiter.wait,
+            )
         except httpx.HTTPError as exc:
             raise IngestionError(f"arXiv request failed: {exc}") from exc
 

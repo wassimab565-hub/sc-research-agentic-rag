@@ -91,3 +91,33 @@ def test_api_error_entry_raises_ingestion_error() -> None:
 def test_invalid_arguments(kwargs) -> None:
     with pytest.raises(ValueError):
         make_client(ok(EMPTY_FEED)).search(**kwargs)
+
+
+def test_sends_user_agent_and_waits_between_requests() -> None:
+    from sc_research_agentic_rag.ingestion.http import USER_AGENT, RateLimiter
+
+    now = [0.0]
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    agents: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        agents.append(request.headers["user-agent"])
+        return httpx.Response(200, text=EMPTY_FEED)
+
+    limiter = RateLimiter(3.0, clock=lambda: now[0], sleep=fake_sleep)
+    client = ArxivClient(client=httpx.Client(transport=httpx.MockTransport(handler)), rate_limiter=limiter)
+    client.search("a")
+    client.search("b")
+    assert agents == [USER_AGENT, USER_AGENT]
+    assert sleeps == [3.0]
+
+
+def test_retries_on_503_then_succeeds() -> None:
+    responses = [httpx.Response(503), httpx.Response(200, text=EMPTY_FEED)]
+    client = make_client(lambda request: responses.pop(0))
+    assert client.search("x") == []

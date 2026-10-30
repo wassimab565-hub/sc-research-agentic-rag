@@ -114,3 +114,22 @@ def test_rebuild_abstract_orders_by_position() -> None:
 def test_invalid_arguments(kwargs) -> None:
     with pytest.raises(ValueError):
         make_client(ok({"results": []})).search(**kwargs)
+
+
+def test_retries_on_429_then_succeeds() -> None:
+    responses = [httpx.Response(429), httpx.Response(200, json={"results": []})]
+    client = make_client(lambda request: responses.pop(0))
+    assert client.search("x") == []
+
+
+def test_sends_user_agent() -> None:
+    from sc_research_agentic_rag.ingestion.http import USER_AGENT
+
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["user-agent"])
+        return httpx.Response(200, json={"results": []})
+
+    make_client(handler).search("x")
+    assert seen == [USER_AGENT]
