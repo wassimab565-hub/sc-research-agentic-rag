@@ -1,3 +1,4 @@
+from sc_research_agentic_rag.document_processing.cleaning import clean_pages
 from sc_research_agentic_rag.document_processing.downloader import (
     DownloadResult,
     DownloadStatus,
@@ -14,6 +15,7 @@ __all__ = [
     "ExtractionError",
     "Page",
     "PdfDownloader",
+    "clean_pages",
     "extract_pages",
     "upload_uid",
 ]

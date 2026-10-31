@@ -4,6 +4,7 @@ import pytest
 from pypdf import PageObject, PdfReader, PdfWriter
 
 from sc_research_agentic_rag.document_processing import ExtractionError, extract_pages, upload_uid
+from sc_research_agentic_rag.document_processing.extractor import looks_fragmented
 
 
 def test_extracts_pages_in_order_with_numbers(write_pdf) -> None:
@@ -75,3 +76,42 @@ def test_failing_page_is_logged_and_left_empty(write_pdf, monkeypatch, caplog) -
 
 def test_upload_uid_uses_file_stem(tmp_path) -> None:
     assert upload_uid(tmp_path / "My Paper.pdf") == "upload:My Paper"
+
+
+FRAGMENTED = "\n\n".join(["RAPPORT", "DE", "TRAVAUX", "PRATIQUES", "IMAGE", "MINING"])
+PROSE = "\n".join(["This is a normal line of text."] * 6)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (FRAGMENTED, True),
+        (PROSE, False),
+        ("One\nTwo\nThree", False),
+        ("", False),
+        ("\n".join(["Heading", "A normal sentence here.", "Another normal sentence."] * 3), False),
+    ],
+)
+def test_looks_fragmented(text: str, expected: bool) -> None:
+    assert looks_fragmented(text) is expected
+
+
+def test_fragmented_text_falls_back_to_layout_mode(write_pdf, monkeypatch) -> None:
+    def fake_extract(self, *args, **kwargs):
+        if kwargs.get("extraction_mode") == "layout":
+            return "   RAPPORT DE TRAVAUX      PRATIQUES\n       IMAGE MINING\n"
+        return FRAGMENTED
+
+    monkeypatch.setattr(PageObject, "extract_text", fake_extract)
+    pages = extract_pages(write_pdf(["x"]), "arxiv:1")
+    assert pages[0].text == "RAPPORT DE TRAVAUX PRATIQUES\nIMAGE MINING"
+
+
+def test_normal_text_does_not_use_layout_mode(write_pdf, monkeypatch) -> None:
+    def fake_extract(self, *args, **kwargs):
+        if kwargs.get("extraction_mode") == "layout":
+            raise AssertionError("layout mode must not be used")
+        return PROSE
+
+    monkeypatch.setattr(PageObject, "extract_text", fake_extract)
+    assert extract_pages(write_pdf(["x"]), "arxiv:1")[0].text == PROSE
