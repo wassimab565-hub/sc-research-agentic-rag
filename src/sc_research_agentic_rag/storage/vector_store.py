@@ -38,6 +38,34 @@ class SearchHit:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SearchFilter:
+    paper_uids: Sequence[str] | None = None
+    sources: Sequence[str] | None = None
+    year_min: int | None = None
+    year_max: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.year_min is not None and self.year_max is not None and self.year_min > self.year_max:
+            raise ValueError("year_min must be <= year_max")
+
+    def to_qdrant(self) -> models.Filter | None:
+        must: list[models.Condition] = []
+        if self.paper_uids:
+            must.append(_match_any("paper_uid", self.paper_uids))
+        if self.sources:
+            must.append(_match_any("source", self.sources))
+        if self.year_min is not None or self.year_max is not None:
+            must.append(
+                models.FieldCondition(key="year", range=models.Range(gte=self.year_min, lte=self.year_max))
+            )
+        return models.Filter(must=must) if must else None
+
+
+def _match_any(key: str, values: Sequence[str]) -> models.FieldCondition:
+    return models.FieldCondition(key=key, match=models.MatchAny(any=list(values)))
+
+
 class VectorStore:
     def __init__(self, client: QdrantClient, collection: str) -> None:
         self._client = client
@@ -108,12 +136,23 @@ class VectorStore:
             points_selector=models.FilterSelector(filter=_paper_filter(paper_uid)),
         )
 
-    def search(self, vector: list[float], limit: int = 5) -> list[SearchHit]:
+    def search(
+        self,
+        vector: list[float],
+        limit: int = 5,
+        filters: SearchFilter | None = None,
+        score_threshold: float | None = None,
+    ) -> list[SearchHit]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
         self._require_collection()
         response = self._client.query_points(
-            self._collection, query=vector, limit=limit, with_payload=True
+            self._collection,
+            query=vector,
+            limit=limit,
+            query_filter=filters.to_qdrant() if filters else None,
+            score_threshold=score_threshold,
+            with_payload=True,
         )
         return [
             SearchHit(
