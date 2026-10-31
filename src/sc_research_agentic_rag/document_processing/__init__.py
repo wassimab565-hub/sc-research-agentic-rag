@@ -1,3 +1,4 @@
+from sc_research_agentic_rag.document_processing.chunking import chunk_pages
 from sc_research_agentic_rag.document_processing.cleaning import clean_pages
 from sc_research_agentic_rag.document_processing.downloader import (
     DownloadResult,
@@ -15,6 +16,7 @@ __all__ = [
     "ExtractionError",
     "Page",
     "PdfDownloader",
+    "chunk_pages",
     "clean_pages",
     "extract_pages",
     "upload_uid",
