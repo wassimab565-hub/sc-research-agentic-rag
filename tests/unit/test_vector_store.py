@@ -188,3 +188,18 @@ def test_from_settings_server_mode_passes_url_and_key(clean_env, monkeypatch) ->
     settings = QdrantSettings(_env_file=None, url="http://localhost:6333", api_key="secret")
     VectorStore.from_settings("BAAI/bge-m3", settings)
     assert received == {"url": "http://localhost:6333", "api_key": "secret"}
+
+
+def test_count_paper_counts_only_that_paper() -> None:
+    store = make_store()
+    store.ensure_collection(2)
+    store.upsert(
+        [
+            record("a#0", [1, 0], paper_uid="a"),
+            record("a#1", [1, 1], paper_uid="a"),
+            record("b#0", [0, 1], paper_uid="b"),
+        ]
+    )
+    assert store.count_paper("a") == 2
+    assert store.count_paper("b") == 1
+    assert store.count_paper("missing") == 0

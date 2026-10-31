@@ -18,6 +18,12 @@ def point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
 
 
+def _paper_filter(paper_uid: str) -> models.Filter:
+    return models.Filter(
+        must=[models.FieldCondition(key="paper_uid", match=models.MatchValue(value=paper_uid))]
+    )
+
+
 @dataclass(frozen=True)
 class PointRecord:
     chunk_id: str
@@ -89,15 +95,17 @@ class VectorStore:
         self._require_collection()
         return self._client.count(self._collection, exact=True).count
 
+    def count_paper(self, paper_uid: str) -> int:
+        self._require_collection()
+        return self._client.count(
+            self._collection, count_filter=_paper_filter(paper_uid), exact=True
+        ).count
+
     def delete_paper(self, paper_uid: str) -> None:
         self._require_collection()
         self._client.delete(
             self._collection,
-            points_selector=models.FilterSelector(
-                filter=models.Filter(
-                    must=[models.FieldCondition(key="paper_uid", match=models.MatchValue(value=paper_uid))]
-                )
-            ),
+            points_selector=models.FilterSelector(filter=_paper_filter(paper_uid)),
         )
 
     def search(self, vector: list[float], limit: int = 5) -> list[SearchHit]:

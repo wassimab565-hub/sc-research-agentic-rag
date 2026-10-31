@@ -1,5 +1,6 @@
 from sc_research_agentic_rag.storage.config import QdrantSettings
 from sc_research_agentic_rag.storage.errors import VectorStoreError
+from sc_research_agentic_rag.storage.indexer import IndexResult, Indexer, IndexStatus
 from sc_research_agentic_rag.storage.vector_store import (
     PointRecord,
     SearchHit,
@@ -9,6 +10,9 @@ from sc_research_agentic_rag.storage.vector_store import (
 )
 
 __all__ = [
+    "IndexResult",
+    "IndexStatus",
+    "Indexer",
     "PointRecord",
     "QdrantSettings",
     "SearchHit",
