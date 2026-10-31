@@ -15,4 +15,5 @@ data/processed/*
 data/chunks/*
 data/evaluation/*
 data/cache/*
+data/qdrant/
 !data/**/.gitkeep
