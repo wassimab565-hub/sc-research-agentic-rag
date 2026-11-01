@@ -1,11 +1,7 @@
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from sc_research_agentic_rag.storage.vector_store import SearchFilter, SearchHit, VectorStore
-
-_CAP_OVERSAMPLE = 5
-_MAX_FETCH = 200
 
 
 class QueryEmbedder(Protocol):
@@ -69,22 +65,11 @@ class Retriever:
         if max_per_paper is not None and max_per_paper < 1:
             raise ValueError("max_per_paper must be >= 1")
 
-        fetch = top_k if max_per_paper is None else min(top_k * _CAP_OVERSAMPLE, _MAX_FETCH)
         hits = self._store.search(
             self._embedder.embed_query(question),
-            limit=fetch,
+            limit=top_k,
             filters=filters,
             score_threshold=score_threshold,
+            max_per_paper=max_per_paper,
         )
-
-        chunks: list[RetrievedChunk] = []
-        per_paper: Counter[str] = Counter()
-        for hit in hits:
-            chunk = RetrievedChunk.from_hit(hit)
-            if max_per_paper is not None and per_paper[chunk.paper_uid] >= max_per_paper:
-                continue
-            per_paper[chunk.paper_uid] += 1
-            chunks.append(chunk)
-            if len(chunks) == top_k:
-                break
-        return chunks
+        return [RetrievedChunk.from_hit(hit) for hit in hits]

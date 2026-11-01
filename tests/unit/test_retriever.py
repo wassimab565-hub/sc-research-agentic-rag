@@ -98,6 +98,40 @@ def test_max_per_paper_spreads_results(store) -> None:
     assert ids(chunks) == ["arxiv:1#0", "openalex:W2#0", "upload:rapport#0"]
 
 
+def test_dominant_paper_does_not_starve_the_others() -> None:
+    store = make_store()
+    for n in range(30):
+        add(store, f"big#{n}", [1, 0.001 * n], title="Big paper")
+    for index, paper in enumerate(["p1", "p2", "p3", "p4"]):
+        add(store, f"{paper}#0", [1, 0.5 + 0.1 * index], title=paper)
+
+    chunks = Retriever(FakeEmbedder(), store).retrieve("q", top_k=5, max_per_paper=1)
+
+    assert [c.paper_uid for c in chunks] == ["big", "p1", "p2", "p3", "p4"]
+
+
+def test_max_per_paper_two_keeps_best_chunks_sorted(store) -> None:
+    chunks = Retriever(FakeEmbedder(), store).retrieve("q", top_k=4, max_per_paper=2)
+    assert ids(chunks) == ["arxiv:1#0", "arxiv:1#1", "openalex:W2#0", "upload:rapport#0"]
+    assert [c.score for c in chunks] == sorted((c.score for c in chunks), reverse=True)
+
+
+def test_max_per_paper_combines_with_filters_and_threshold(store) -> None:
+    chunks = Retriever(FakeEmbedder(), store).retrieve(
+        "q",
+        top_k=5,
+        filters=SearchFilter(sources=["arxiv", "openalex"]),
+        score_threshold=0.5,
+        max_per_paper=1,
+    )
+    assert ids(chunks) == ["arxiv:1#0", "openalex:W2#0"]
+
+
+def test_store_rejects_invalid_max_per_paper(store) -> None:
+    with pytest.raises(ValueError):
+        store.search([1.0, 0.0], max_per_paper=0)
+
+
 def test_max_per_paper_may_return_fewer_than_top_k(store) -> None:
     chunks = Retriever(FakeEmbedder(), store).retrieve("q", top_k=10, max_per_paper=1)
     assert len(chunks) == 4

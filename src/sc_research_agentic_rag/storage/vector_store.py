@@ -142,25 +142,48 @@ class VectorStore:
         limit: int = 5,
         filters: SearchFilter | None = None,
         score_threshold: float | None = None,
+        max_per_paper: int | None = None,
     ) -> list[SearchHit]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
+        if max_per_paper is not None and max_per_paper < 1:
+            raise ValueError("max_per_paper must be >= 1")
         self._require_collection()
-        response = self._client.query_points(
-            self._collection,
-            query=vector,
-            limit=limit,
-            query_filter=filters.to_qdrant() if filters else None,
-            score_threshold=score_threshold,
-            with_payload=True,
-        )
+
+        query_filter = filters.to_qdrant() if filters else None
+        if max_per_paper is None:
+            points = self._client.query_points(
+                self._collection,
+                query=vector,
+                limit=limit,
+                query_filter=query_filter,
+                score_threshold=score_threshold,
+                with_payload=True,
+            ).points
+        else:
+            groups = self._client.query_points_groups(
+                self._collection,
+                group_by="paper_uid",
+                query=vector,
+                limit=limit,
+                group_size=max_per_paper,
+                query_filter=query_filter,
+                score_threshold=score_threshold,
+                with_payload=True,
+            ).groups
+            points = sorted(
+                (point for group in groups for point in group.hits),
+                key=lambda point: point.score,
+                reverse=True,
+            )[:limit]
+
         return [
             SearchHit(
                 chunk_id=(point.payload or {}).get("chunk_id", ""),
                 score=point.score,
                 payload=point.payload or {},
             )
-            for point in response.points
+            for point in points
         ]
 
     def close(self) -> None:
