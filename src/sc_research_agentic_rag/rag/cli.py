@@ -4,6 +4,7 @@ from collections.abc import Sequence
 
 from sc_research_agentic_rag.embeddings import Embedder, EmbeddingError
 from sc_research_agentic_rag.llm import LLMError, OllamaClient
+from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.rag.context import DEFAULT_MAX_CONTEXT_CHARS, SourcePassage
 from sc_research_agentic_rag.rag.pipeline import RagAnswer, RagPipeline
 from sc_research_agentic_rag.retrieval import Retriever
@@ -34,7 +35,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--source", action="append", choices=["arxiv", "openalex", "upload"])
     parser.add_argument("--year-min", type=int)
     parser.add_argument("--year-max", type=int)
-    parser.add_argument("--threshold", type=float, help="minimum similarity score")
+    parser.add_argument(
+        "--threshold", type=float, help="minimum similarity score (default: RAG_SCORE_THRESHOLD)"
+    )
     parser.add_argument("--max-per-paper", type=int)
     parser.add_argument("--max-context-chars", type=int, default=DEFAULT_MAX_CONTEXT_CHARS)
     parser.add_argument("--show-sources", action="store_true", help="print every retrieved passage")
@@ -55,7 +58,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
-    pipeline, store = build_pipeline(args.top_k, args.max_context_chars, args.threshold, args.max_per_paper)
+    threshold = args.threshold if args.threshold is not None else RagSettings().score_threshold
+    pipeline, store = build_pipeline(args.top_k, args.max_context_chars, threshold, args.max_per_paper)
     try:
         result = pipeline.ask(args.question, filters)
     except (EmbeddingError, VectorStoreError, LLMError) as exc:
@@ -77,7 +81,7 @@ def _print_result(result: RagAnswer, show_sources: bool) -> None:
         for passage in result.cited_sources:
             print(f"  {_format_source(passage)}")
     else:
-        print("\nWarning: the answer cites no source, treat it with caution.")
+        print("\nNote: the answer cites no source (the sources may not contain the answer, or it is unsupported).")
     if result.invalid_citations:
         numbers = ", ".join(f"[{n}]" for n in result.invalid_citations)
         print(f"Warning: the answer cites unknown sources: {numbers}")

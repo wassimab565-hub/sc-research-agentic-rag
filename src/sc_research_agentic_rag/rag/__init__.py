@@ -1,3 +1,4 @@
+from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.rag.context import DEFAULT_MAX_CONTEXT_CHARS, SourcePassage, build_passages
 from sc_research_agentic_rag.rag.pipeline import (
     NO_SOURCES_MESSAGE,
@@ -13,6 +14,7 @@ __all__ = [
     "SYSTEM_PROMPT",
     "RagAnswer",
     "RagPipeline",
+    "RagSettings",
     "SourcePassage",
     "build_messages",
     "build_passages",
