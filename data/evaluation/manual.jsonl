@@ -1,0 +1,12 @@
+{"id": "man-01", "question": "Combien d'images de la classe nv le sous-ensemble HAM500 contient-il ?", "evidence": [{"paper_uid": "upload:test", "contains": "nv 332"}], "source": "manual"}
+{"id": "man-02", "question": "Quelle proportion du jeu de données représente la classe majoritaire ?", "evidence": [{"paper_uid": "upload:test", "contains": "66,4"}], "source": "manual"}
+{"id": "man-03", "question": "Combien d'images sont utilisées pour l'entraînement, la validation et le test ?", "evidence": [{"paper_uid": "upload:test", "contains": "320 images pour"}], "source": "manual"}
+{"id": "man-04", "question": "Quel optimiseur est utilisé pour entraîner les modèles ?", "evidence": [{"paper_uid": "upload:test", "contains": "optimiseur est Adam"}], "source": "manual"}
+{"id": "man-05", "question": "Quelle architecture est la plus volumineuse de la comparaison ?", "evidence": [{"paper_uid": "upload:test", "contains": "la plus volumineuse"}], "source": "manual"}
+{"id": "man-06", "question": "Combien de paramètres compte le modèle VGG16 ?", "evidence": [{"paper_uid": "upload:test", "contains": "14 781 255"}], "source": "manual"}
+{"id": "man-07", "question": "Quel est le nombre de paramètres du CNN de base ?", "evidence": [{"paper_uid": "upload:test", "contains": "615 975"}], "source": "manual"}
+{"id": "man-08", "question": "What is the goal of the dense passage retriever (DPR)?", "evidence": [{"paper_uid": "upload:dpr", "contains": "low-dimensional and continuous"}], "source": "manual"}
+{"id": "man-09", "question": "What similarity function does DPR use to compare a question and a passage?", "evidence": [{"paper_uid": "upload:dpr", "contains": "dot product of their vectors"}], "source": "manual"}
+{"id": "man-10", "question": "Is a dense representation alone better than sparse methods for retrieval?", "evidence": [{"paper_uid": "upload:dpr", "contains": "typically inferior to the sparse one"}], "source": "manual"}
+{"id": "man-11", "question": "When does active retrieval augmented generation trigger a retrieval step?", "evidence": [{"paper_uid": "arxiv:2305.06983", "contains": "low-probability"}], "source": "manual"}
+{"id": "man-12", "question": "How does retrieval-augmented generation enhance the generation process for images?", "evidence": [{"paper_uid": "arxiv:2506.06962", "contains": "incorporating real-world images as additional references"}], "source": "manual"}

@@ -14,6 +14,8 @@ data/raw/*
 data/processed/*
 data/chunks/*
 data/evaluation/*
+!data/evaluation/manual.jsonl
+!data/evaluation/.gitkeep
 data/cache/*
 data/qdrant/
 !data/**/.gitkeep
