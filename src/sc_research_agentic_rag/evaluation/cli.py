@@ -15,25 +15,37 @@ from sc_research_agentic_rag.evaluation.dataset import (
 from sc_research_agentic_rag.evaluation.metrics import QuestionResult, aggregate
 from sc_research_agentic_rag.evaluation.models import EvalQuestion
 from sc_research_agentic_rag.evaluation.runner import RetrieveFn, run_evaluation
-from sc_research_agentic_rag.retrieval import Retriever
+from sc_research_agentic_rag.retrieval import Bm25Retriever, HybridRetriever, Retriever
 from sc_research_agentic_rag.storage import VectorStore, VectorStoreError
 
 DEFAULT_CHUNKS_DIR = Path("data/chunks")
 DEFAULT_RESULTS_DIR = Path("data/evaluation/results")
+MODES = ("dense", "bm25", "hybrid")
 
 
-def build_retrieve_fn() -> tuple[RetrieveFn, str, Callable[[], None]]:
-    embedder = Embedder.from_settings()
+def build_retrieve_fn(mode: str = "dense") -> tuple[RetrieveFn, str, Callable[[], None]]:
+    embedder = Embedder.from_settings()  # the model is only loaded on the first embedding call
     store = VectorStore.from_settings(embedder.model_name)
-    retriever = Retriever(embedder, store)
-    return (lambda question, k: retriever.retrieve(question, top_k=k)), embedder.model_name, store.close
+    try:
+        if mode == "bm25":
+            retriever = Bm25Retriever(store)
+        elif mode == "hybrid":
+            retriever = HybridRetriever(Retriever(embedder, store), Bm25Retriever(store))
+        else:
+            retriever = Retriever(embedder, store)
+    except VectorStoreError:
+        store.close()
+        raise
+    model_name = "none (bm25)" if mode == "bm25" else embedder.model_name
+    return (lambda question, k: retriever.retrieve(question, top_k=k)), model_name, store.close
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate retrieval quality on question datasets.")
     parser.add_argument("--dataset", action="append", type=Path, required=True, help="JSONL file (repeatable)")
     parser.add_argument("--k", type=int, nargs="+", default=[1, 3, 5, 10])
-    parser.add_argument("--label", default="dense", help="name of the retrieval setup, saved with the results")
+    parser.add_argument("--mode", choices=MODES, default="dense", help="retrieval setup to evaluate")
+    parser.add_argument("--label", help="name saved with the results (default: the mode)")
     parser.add_argument("--validate", action="store_true", help="only check the datasets against the chunks")
     parser.add_argument("--show-misses", type=int, default=0, metavar="N")
     parser.add_argument("--chunks-dir", type=Path, default=DEFAULT_CHUNKS_DIR)
@@ -42,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if any(k < 1 for k in args.k):
         parser.error("--k values must be >= 1")
     ks = sorted(set(args.k))
+    args.label = args.label or args.mode
 
     try:
         datasets = {path.stem: load_dataset(path) for path in args.dataset}
@@ -66,7 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     try:
-        retrieve, model_name, close = build_retrieve_fn()
+        retrieve, model_name, close = build_retrieve_fn(args.mode)
     except (EmbeddingError, VectorStoreError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -116,6 +129,7 @@ def _save(args, ks, model_name, datasets, all_results, summary) -> Path:
     payload = {
         "created_at": now.isoformat(),
         "label": args.label,
+        "mode": args.mode,
         "embedding_model": model_name,
         "k": ks,
         "datasets": {

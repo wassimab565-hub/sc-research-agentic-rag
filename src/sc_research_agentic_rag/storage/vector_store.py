@@ -1,6 +1,6 @@
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,6 +48,21 @@ class SearchFilter:
     def __post_init__(self) -> None:
         if self.year_min is not None and self.year_max is not None and self.year_min > self.year_max:
             raise ValueError("year_min must be <= year_max")
+
+    def accepts(self, payload: dict[str, Any]) -> bool:
+        if self.paper_uids and payload.get("paper_uid") not in self.paper_uids:
+            return False
+        if self.sources and payload.get("source") not in self.sources:
+            return False
+        if self.year_min is not None or self.year_max is not None:
+            year = payload.get("year")
+            if year is None:
+                return False
+            if self.year_min is not None and year < self.year_min:
+                return False
+            if self.year_max is not None and year > self.year_max:
+                return False
+        return True
 
     def to_qdrant(self) -> models.Filter | None:
         must: list[models.Condition] = []
@@ -185,6 +200,24 @@ class VectorStore:
             )
             for point in points
         ]
+
+    def scroll_payloads(self, batch_size: int = 256) -> Iterator[dict[str, Any]]:
+        if batch_size < 1:
+            raise ValueError("batch_size must be >= 1")
+        self._require_collection()
+        offset = None
+        while True:
+            points, offset = self._client.scroll(
+                self._collection,
+                limit=batch_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in points:
+                yield point.payload or {}
+            if offset is None:
+                return
 
     def close(self) -> None:
         self._client.close()

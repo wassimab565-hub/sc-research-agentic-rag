@@ -6,6 +6,7 @@ from qdrant_client import QdrantClient
 from sc_research_agentic_rag.storage import (
     PointRecord,
     QdrantSettings,
+    SearchFilter,
     VectorStore,
     VectorStoreError,
     default_collection_name,
@@ -203,3 +204,35 @@ def test_count_paper_counts_only_that_paper() -> None:
     assert store.count_paper("a") == 2
     assert store.count_paper("b") == 1
     assert store.count_paper("missing") == 0
+
+
+
+def test_search_filter_accepts_matches_the_qdrant_semantics() -> None:
+    payload = {"paper_uid": "a", "source": "arxiv", "year": 2020}
+    assert SearchFilter().accepts(payload)
+    assert SearchFilter(paper_uids=["a"], sources=["arxiv"], year_min=2020, year_max=2020).accepts(payload)
+    assert not SearchFilter(paper_uids=["b"]).accepts(payload)
+    assert not SearchFilter(sources=["upload"]).accepts(payload)
+    assert not SearchFilter(year_min=2021).accepts(payload)
+    assert not SearchFilter(year_max=2019).accepts(payload)
+    assert not SearchFilter(year_min=2000).accepts({"paper_uid": "a", "source": "upload", "year": None})
+    assert SearchFilter(sources=["upload"]).accepts({"source": "upload"})
+
+
+def test_scroll_payloads_returns_every_payload_across_batches() -> None:
+    store = make_store()
+    store.ensure_collection(2)
+    store.upsert([record(f"p#{i}", [1, i / 10], paper_uid="p", n=i) for i in range(7)])
+    payloads = list(store.scroll_payloads(batch_size=3))
+    assert sorted(p["n"] for p in payloads) == list(range(7))
+    assert all(p["chunk_id"].startswith("p#") for p in payloads)
+
+
+def test_scroll_payloads_errors() -> None:
+    store = make_store("missing")
+    with pytest.raises(VectorStoreError):
+        list(store.scroll_payloads())
+    store = make_store()
+    store.ensure_collection(2)
+    with pytest.raises(ValueError):
+        list(store.scroll_payloads(batch_size=0))

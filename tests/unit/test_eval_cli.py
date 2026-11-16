@@ -49,7 +49,7 @@ def fake_services(order_by_question: dict[str, list[str]], closed: list):
         names = order_by_question[question]
         return [retrieved(corpus[name], rank) for rank, name in enumerate(names, start=1)][:k]
 
-    return lambda: (retrieve, "fake/model", lambda: closed.append(True))
+    return lambda mode="dense": (retrieve, "fake/model", lambda: closed.append(True))
 
 
 PERFECT = {"Which one is alpha?": ["alpha", "beta"], "Which one is beta?": ["beta", "alpha"], "Which one is gamma?": ["gamma", "beta"]}
