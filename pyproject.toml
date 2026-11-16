@@ -16,6 +16,7 @@ dependencies = [
     "pypdf>=5.0",
     "sentence-transformers>=3.0",
     "qdrant-client>=1.12",
+    "neo4j>=5.20",
 ]
 
 [project.optional-dependencies]

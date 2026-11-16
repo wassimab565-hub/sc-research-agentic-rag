@@ -1,3 +1,4 @@
+# src\sc_research_agentic_rag\rag\
 from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.rag.context import DEFAULT_MAX_CONTEXT_CHARS, SourcePassage, build_passages
 from sc_research_agentic_rag.rag.pipeline import (
