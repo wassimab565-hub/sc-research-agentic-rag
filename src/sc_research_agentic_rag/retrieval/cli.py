@@ -3,7 +3,9 @@ import sys
 from collections.abc import Sequence
 
 from sc_research_agentic_rag.embeddings import Embedder, EmbeddingError
-from sc_research_agentic_rag.retrieval.retriever import RetrievedChunk, Retriever
+from sc_research_agentic_rag.retrieval.config import RetrievalSettings
+from sc_research_agentic_rag.retrieval.factory import MODES, build_retriever
+from sc_research_agentic_rag.retrieval.retriever import RetrievedChunk
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
 
@@ -16,6 +18,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Search the indexed chunks.")
     parser.add_argument("question")
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--mode", choices=MODES, help="retrieval mode (default: RETRIEVAL_MODE)")
     parser.add_argument("--paper", action="append", metavar="UID", help="restrict to a paper (repeatable)")
     parser.add_argument("--source", action="append", choices=["arxiv", "openalex", "upload"])
     parser.add_argument("--year-min", type=int)
@@ -38,9 +41,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    mode = args.mode or RetrievalSettings().mode
     embedder, store = build_services()
     try:
-        chunks = Retriever(embedder, store).retrieve(
+        chunks = build_retriever(mode, embedder, store).retrieve(
             args.question,
             top_k=args.top_k,
             filters=filters,

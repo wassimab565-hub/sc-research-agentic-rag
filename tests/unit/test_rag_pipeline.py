@@ -172,6 +172,7 @@ def test_cli_reports_errors_and_closes_the_store(monkeypatch, capsys) -> None:
 
 
 def test_cli_passes_options_to_the_pipeline_builder(monkeypatch) -> None:
+    monkeypatch.delenv("RETRIEVAL_MODE", raising=False)
     received: list = []
     pipeline, store = fake_pipeline()
 
@@ -181,7 +182,7 @@ def test_cli_passes_options_to_the_pipeline_builder(monkeypatch) -> None:
 
     monkeypatch.setattr(cli, "build_pipeline", build)
     cli.main(["q?", "--top-k", "3", "--threshold", "0.5", "--max-per-paper", "1", "--max-context-chars", "5000"])
-    assert received == [3, 5000, 0.5, 1]
+    assert received == [3, 5000, 0.5, 1, "dense"]
 
 
 @pytest.mark.parametrize(
@@ -193,3 +194,15 @@ def test_cli_rejects_invalid_arguments(argv) -> None:
     with pytest.raises(SystemExit) as exc:
         cli.main(argv)
     assert exc.value.code == 2
+
+def test_cli_mode_option_is_passed_to_the_pipeline_builder(monkeypatch) -> None:
+    received: list = []
+    pipeline, store = fake_pipeline()
+
+    def build(*args):
+        received.extend(args)
+        return pipeline, store
+
+    monkeypatch.setattr(cli, "build_pipeline", build)
+    cli.main(["q?", "--mode", "hybrid"])
+    assert received[-1] == "hybrid"

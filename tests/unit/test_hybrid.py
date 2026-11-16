@@ -70,7 +70,46 @@ def test_hybrid_works_when_one_side_is_empty() -> None:
     assert ids(result) == ["a#0"]
 
 
-@pytest.mark.parametrize("kwargs", [{"top_k": 0}])
+def test_threshold_gates_on_the_best_dense_score() -> None:
+    dense = FakeRanker([chunk("a#0", 0.30), chunk("b#0", 0.35)])
+    bm25 = FakeRanker([chunk("c#0", 9.0)])
+    assert HybridRetriever(dense, bm25).retrieve("q?", score_threshold=0.4) == []
+    assert bm25.calls == []
+
+
+def test_threshold_passes_when_one_dense_chunk_reaches_it() -> None:
+    dense = FakeRanker([chunk("a#0", 0.45), chunk("b#0", 0.20)])
+    bm25 = FakeRanker([chunk("c#0", 9.0)])
+    result = HybridRetriever(dense, bm25).retrieve("q?", score_threshold=0.4)
+    assert set(ids(result)) == {"a#0", "b#0", "c#0"}
+    assert all(c.score < 0.1 for c in result)
+
+
+def test_threshold_with_no_dense_results_returns_nothing() -> None:
+    assert HybridRetriever(FakeRanker([]), FakeRanker([chunk("c#0")])).retrieve("q?", score_threshold=0.1) == []
+
+
+def test_no_threshold_means_no_gate() -> None:
+    result = HybridRetriever(FakeRanker([chunk("a#0", 0.01)]), FakeRanker([])).retrieve("q?")
+    assert ids(result) == ["a#0"]
+
+
+def test_max_per_paper_caps_after_fusion_keeping_order() -> None:
+    dense = FakeRanker([chunk("a#0"), chunk("a#1"), chunk("b#0"), chunk("a#2")])
+    bm25 = FakeRanker([chunk("a#1"), chunk("c#0")])
+    result = HybridRetriever(dense, bm25).retrieve("q?", top_k=10, max_per_paper=1)
+    assert ids(result) == ["a#1", "c#0", "b#0"]
+    two = HybridRetriever(dense, bm25).retrieve("q?", top_k=10, max_per_paper=2)
+    assert ids(two) == ["a#1", "a#0", "c#0", "b#0"]
+
+
+def test_max_per_paper_is_applied_before_top_k() -> None:
+    dense = FakeRanker([chunk("a#0"), chunk("a#1"), chunk("b#0")])
+    result = HybridRetriever(dense, FakeRanker([])).retrieve("q?", top_k=2, max_per_paper=1)
+    assert ids(result) == ["a#0", "b#0"]
+
+
+@pytest.mark.parametrize("kwargs", [{"top_k": 0}, {"max_per_paper": 0}])
 def test_invalid_arguments(kwargs) -> None:
     with pytest.raises(ValueError):
         HybridRetriever(FakeRanker([]), FakeRanker([])).retrieve("q?", **kwargs)

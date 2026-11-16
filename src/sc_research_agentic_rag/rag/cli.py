@@ -7,17 +7,22 @@ from sc_research_agentic_rag.llm import LLMError, OllamaClient
 from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.rag.context import DEFAULT_MAX_CONTEXT_CHARS, SourcePassage
 from sc_research_agentic_rag.rag.pipeline import RagAnswer, RagPipeline
-from sc_research_agentic_rag.retrieval import Retriever
+from sc_research_agentic_rag.retrieval import MODES, RetrievalSettings, build_retriever
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
 
 def build_pipeline(
-    top_k: int, max_context_chars: int, score_threshold: float | None, max_per_paper: int | None
+    top_k: int, max_context_chars: int, score_threshold: float | None, max_per_paper: int | None, mode: str
 ) -> tuple[RagPipeline, VectorStore]:
     embedder = Embedder.from_settings()
     store = VectorStore.from_settings(embedder.model_name)
+    try:
+        retriever = build_retriever(mode, embedder, store)
+    except VectorStoreError:
+        store.close()
+        raise
     pipeline = RagPipeline(
-        Retriever(embedder, store),
+        retriever,
         OllamaClient(),
         top_k=top_k,
         max_context_chars=max_context_chars,
@@ -31,6 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ask a question about the indexed papers.")
     parser.add_argument("question")
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--mode", choices=MODES, help="retrieval mode (default: RETRIEVAL_MODE)")
     parser.add_argument("--paper", action="append", metavar="UID", help="restrict to a paper (repeatable)")
     parser.add_argument("--source", action="append", choices=["arxiv", "openalex", "upload"])
     parser.add_argument("--year-min", type=int)
@@ -59,14 +65,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(str(exc))
 
     threshold = args.threshold if args.threshold is not None else RagSettings().score_threshold
-    pipeline, store = build_pipeline(args.top_k, args.max_context_chars, threshold, args.max_per_paper)
+    mode = args.mode or RetrievalSettings().mode
+    store = None
     try:
+        pipeline, store = build_pipeline(args.top_k, args.max_context_chars, threshold, args.max_per_paper, mode)
         result = pipeline.ask(args.question, filters)
     except (EmbeddingError, VectorStoreError, LLMError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:
-        store.close()
+        if store is not None:
+            store.close()
 
     _print_result(result, args.show_sources)
     return 0
