@@ -13,6 +13,8 @@ SCHEMA = (
     "CREATE CONSTRAINT paper_uid IF NOT EXISTS FOR (p:Paper) REQUIRE p.uid IS UNIQUE",
     "CREATE CONSTRAINT author_key IF NOT EXISTS FOR (a:Author) REQUIRE a.key IS UNIQUE",
     "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE",
+    "CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE",
+    "CREATE CONSTRAINT concept_key IF NOT EXISTS FOR (c:Concept) REQUIRE c.key IS UNIQUE",
 )
 
 UPSERT_PAPER = """
@@ -32,13 +34,23 @@ CALL (p) {
 }
 """
 
-CLEAR = "MATCH (n) WHERE n:Paper OR n:Author OR n:Category DETACH DELETE n"
-COUNT_NODES = (
-    "MATCH (n) WHERE n:Paper OR n:Author OR n:Category "
-    "RETURN labels(n)[0] AS name, count(n) AS count"
-)
+UPSERT_CHUNK = """
+MERGE (p:Paper {uid: $paper_uid})
+MERGE (c:Chunk {chunk_id: $chunk_id})
+SET c.page = $page, c.paper_uid = $paper_uid
+MERGE (p)-[:HAS_CHUNK]->(c)
+WITH c
+UNWIND $concepts AS concept
+MERGE (k:Concept {key: concept.key})
+ON CREATE SET k.name = concept.name
+MERGE (c)-[:MENTIONS]->(k)
+"""
+
+LABELS = "n:Paper OR n:Author OR n:Category OR n:Chunk OR n:Concept"
+CLEAR = f"MATCH (n) WHERE {LABELS} DETACH DELETE n"
+COUNT_NODES = f"MATCH (n) WHERE {LABELS} RETURN labels(n)[0] AS name, count(n) AS count"
 COUNT_RELATIONSHIPS = (
-    "MATCH ()-[r:AUTHORED|HAS_CATEGORY]->() RETURN type(r) AS name, count(r) AS count"
+    "MATCH ()-[r:AUTHORED|HAS_CATEGORY|HAS_CHUNK|MENTIONS]->() RETURN type(r) AS name, count(r) AS count"
 )
 
 
@@ -83,6 +95,20 @@ class GraphStore:
             url=paper.url,
             authors=[{"key": key, "name": name} for key, name in authors.items()],
             categories=categories,
+        )
+        
+    def upsert_chunk_concepts(self, paper_uid: str, chunk_id: str, page: int, concepts: list[str]) -> None:
+        unique: dict[str, str] = {}
+        for name in concepts:
+            key = author_key(name)  # same normalization (case, accents, spaces)
+            if key:
+                unique.setdefault(key, " ".join(name.split()))
+        self._write(
+            UPSERT_CHUNK,
+            paper_uid=paper_uid,
+            chunk_id=chunk_id,
+            page=page,
+            concepts=[{"key": key, "name": name} for key, name in unique.items()],
         )
 
     def clear(self) -> None:

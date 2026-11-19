@@ -19,3 +19,4 @@ data/evaluation/*
 data/cache/*
 data/qdrant/
 !data/**/.gitkeep
+data/graph/

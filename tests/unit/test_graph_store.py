@@ -66,10 +66,19 @@ def test_author_key(name, expected) -> None:
 def test_ensure_schema_creates_three_constraints() -> None:
     driver = FakeDriver()
     GraphStore(driver, "db").ensure_schema()
-    assert len(driver.calls) == 3
+    assert len(driver.calls) == 5
     assert all("CREATE CONSTRAINT" in query for query, _ in driver.calls)
-    assert driver.databases == ["db"] * 3
+    assert driver.databases == ["db"] * 5
 
+def test_upsert_chunk_concepts_normalizes_and_deduplicates() -> None:
+    driver = FakeDriver()
+    GraphStore(driver).upsert_chunk_concepts("a", "a#0", 3, ["Dense  Retrieval", "dense retrieval", "BM25", " "])
+    _, params = driver.calls[0]
+    assert (params["paper_uid"], params["chunk_id"], params["page"]) == ("a", "a#0", 3)
+    assert params["concepts"] == [
+        {"key": "dense retrieval", "name": "Dense Retrieval"},
+        {"key": "bm25", "name": "BM25"},
+    ]
 
 def test_upsert_paper_sends_metadata_authors_and_categories() -> None:
     driver = FakeDriver()
