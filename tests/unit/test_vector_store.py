@@ -236,3 +236,17 @@ def test_scroll_payloads_errors() -> None:
     store.ensure_collection(2)
     with pytest.raises(ValueError):
         list(store.scroll_payloads(batch_size=0))
+
+def test_get_payloads_returns_only_existing_chunks() -> None:
+    store = make_store()
+    store.ensure_collection(2)
+    store.upsert([record("a#0", [1, 0], paper_uid="a", n=1), record("b#0", [0, 1], paper_uid="b", n=2)])
+    result = store.get_payloads(["b#0", "missing#9"], batch_size=1)
+    assert list(result) == ["b#0"]
+    assert result["b#0"]["n"] == 2
+    assert store.get_payloads([]) == {}
+
+
+def test_get_payloads_on_missing_collection() -> None:
+    with pytest.raises(VectorStoreError):
+        make_store("missing").get_payloads(["a#0"])

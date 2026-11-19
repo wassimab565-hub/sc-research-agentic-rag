@@ -133,3 +133,20 @@ def test_manual_dataset_in_the_repo_is_well_formed() -> None:
     manual = load_dataset(Path("data/evaluation/manual.jsonl"))
     assert 10 <= len(manual) <= 15
     assert len({q.id for q in manual}) == len(manual)
+
+def test_hybrid_graph_fuses_the_three_rankings() -> None:
+    chunks = {name: make_chunk("p", index, f"{name} text") for index, name in enumerate(["alpha", "beta", "gamma"])}
+
+    class Ranker:
+        def __init__(self, names) -> None:
+            self.names = names
+
+        def retrieve(self, question, top_k=5):
+            return [retrieved(chunks[name], rank) for rank, name in enumerate(self.names, start=1)][:top_k]
+
+    retrieve = cli.hybrid_graph(Ranker(["alpha", "beta"]), Ranker(["beta", "gamma"]), Ranker(["beta"]))
+    assert [chunk.chunk_id for chunk in retrieve("q?", 2)] == ["p#1", "p#0"]
+
+
+def test_graph_modes_are_available() -> None:
+    assert {"graph", "hybrid+graph"} <= set(cli.MODES)

@@ -9,6 +9,8 @@ from sc_research_agentic_rag.graph.config import Neo4jSettings
 from sc_research_agentic_rag.graph.errors import GraphError
 from sc_research_agentic_rag.ingestion.models import Paper
 
+from collections.abc import Sequence
+
 SCHEMA = (
     "CREATE CONSTRAINT paper_uid IF NOT EXISTS FOR (p:Paper) REQUIRE p.uid IS UNIQUE",
     "CREATE CONSTRAINT author_key IF NOT EXISTS FOR (a:Author) REQUIRE a.key IS UNIQUE",
@@ -53,6 +55,12 @@ COUNT_RELATIONSHIPS = (
     "MATCH ()-[r:AUTHORED|HAS_CATEGORY|HAS_CHUNK|MENTIONS]->() RETURN type(r) AS name, count(r) AS count"
 )
 
+COUNT_CHUNKS = "MATCH (c:Chunk) RETURN count(c) AS count"
+LIST_CONCEPT_KEYS = "MATCH (k:Concept) RETURN k.key AS key"
+CONCEPT_CHUNKS = (
+    "MATCH (k:Concept)<-[:MENTIONS]-(c:Chunk) WHERE k.key IN $keys "
+    "RETURN k.key AS key, c.chunk_id AS chunk_id"
+)
 
 def author_key(name: str) -> str:
     """Case, accent and spacing insensitive key. 'A. Martin' and 'Alice Martin' stay different."""
@@ -118,6 +126,17 @@ class GraphStore:
         rows = self._read(COUNT_NODES) + self._read(COUNT_RELATIONSHIPS)
         return {row["name"]: row["count"] for row in rows}
 
+    def chunk_count(self) -> int:
+        rows = self._read(COUNT_CHUNKS)
+        return rows[0]["count"] if rows else 0
+
+    def concept_keys(self) -> list[str]:
+        return [row["key"] for row in self._read(LIST_CONCEPT_KEYS)]
+
+    def concept_chunks(self, keys: Sequence[str]) -> list[tuple[str, str]]:
+        rows = self._read(CONCEPT_CHUNKS, keys=list(keys))
+        return [(row["key"], row["chunk_id"]) for row in rows]
+
     def close(self) -> None:
         self._driver.close()
 
@@ -128,9 +147,9 @@ class GraphStore:
         except (Neo4jError, DriverError) as exc:
             raise GraphError(f"Neo4j error: {exc}") from exc
 
-    def _read(self, query: str) -> list[dict[str, Any]]:
+    def _read(self, query: str, **params: Any) -> list[dict[str, Any]]:
         try:
             with self._driver.session(database=self._database) as session:
-                return session.run(query).data()
+                return session.run(query, **params).data()
         except (Neo4jError, DriverError) as exc:
             raise GraphError(f"Neo4j error: {exc}") from exc

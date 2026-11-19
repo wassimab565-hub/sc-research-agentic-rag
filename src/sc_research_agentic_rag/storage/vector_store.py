@@ -144,6 +144,21 @@ class VectorStore:
             self._collection, count_filter=_paper_filter(paper_uid), exact=True
         ).count
 
+    def get_payloads(self, chunk_ids: Sequence[str], batch_size: int = 256) -> dict[str, dict[str, Any]]:
+        self._require_collection()
+        payloads: dict[str, dict[str, Any]] = {}
+        for start in range(0, len(chunk_ids), batch_size):
+            records = self._client.retrieve(
+                self._collection,
+                ids=[point_id(chunk_id) for chunk_id in chunk_ids[start : start + batch_size]],
+                with_payload=True,
+                with_vectors=False,
+            )
+            for record in records:
+                payload = record.payload or {}
+                payloads[payload.get("chunk_id", "")] = payload
+        return payloads
+
     def delete_paper(self, paper_uid: str) -> None:
         self._require_collection()
         self._client.delete(

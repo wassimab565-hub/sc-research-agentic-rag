@@ -138,3 +138,11 @@ def test_from_settings_builds_the_driver(monkeypatch) -> None:
     monkeypatch.setattr(store_module.GraphDatabase, "driver", fake_driver)
     GraphStore.from_settings(Neo4jSettings(_env_file=None, uri="bolt://h:1", user="u", password="p"))
     assert received == {"uri": "bolt://h:1", "auth": ("u", "p")}
+
+def test_concept_queries_read_from_the_graph() -> None:
+    driver = FakeDriver(rows=[[{"count": 7}], [{"key": "bm25"}, {"key": "dpr"}], [{"key": "bm25", "chunk_id": "a#0"}]])
+    store = GraphStore(driver)
+    assert store.chunk_count() == 7
+    assert store.concept_keys() == ["bm25", "dpr"]
+    assert store.concept_chunks(["bm25"]) == [("bm25", "a#0")]
+    assert driver.calls[2][1] == {"keys": ["bm25"]}

@@ -16,29 +16,58 @@ from sc_research_agentic_rag.evaluation.dataset import (
 from sc_research_agentic_rag.evaluation.metrics import QuestionResult, aggregate
 from sc_research_agentic_rag.evaluation.models import EvalQuestion
 from sc_research_agentic_rag.evaluation.runner import RetrieveFn, run_evaluation
-from sc_research_agentic_rag.retrieval import Bm25Retriever, HybridRetriever, Retriever
+from sc_research_agentic_rag.graph import GraphError, GraphRetriever, GraphStore
+from sc_research_agentic_rag.retrieval import Bm25Retriever, HybridRetriever, Retriever, rrf_fuse
+from sc_research_agentic_rag.retrieval.hybrid import DEFAULT_CANDIDATES
 from sc_research_agentic_rag.storage import VectorStore, VectorStoreError
 
 DEFAULT_CHUNKS_DIR = Path("data/chunks")
 DEFAULT_RESULTS_DIR = Path("data/evaluation/results")
-MODES = ("dense", "bm25", "hybrid")
+MODES = ("dense", "bm25", "hybrid", "graph", "hybrid+graph")
 
 
 def build_retrieve_fn(mode: str = "dense") -> tuple[RetrieveFn, str, Callable[[], None]]:
     embedder = Embedder.from_settings()  # the model is only loaded on the first embedding call
     store = VectorStore.from_settings(embedder.model_name)
+    graph = None
     try:
+        dense = Retriever(embedder, store)
         if mode == "bm25":
-            retriever = Bm25Retriever(store)
+            retrieve = _plain(Bm25Retriever(store))
         elif mode == "hybrid":
-            retriever = HybridRetriever(Retriever(embedder, store), Bm25Retriever(store))
+            retrieve = _plain(HybridRetriever(dense, Bm25Retriever(store)))
+        elif mode == "graph":
+            graph = GraphStore.from_settings()
+            retrieve = _plain(GraphRetriever(graph, store))
+        elif mode == "hybrid+graph":
+            graph = GraphStore.from_settings()
+            retrieve = hybrid_graph(dense, Bm25Retriever(store), GraphRetriever(graph, store))
         else:
-            retriever = Retriever(embedder, store)
-    except VectorStoreError:
-        store.close()
+            retrieve = _plain(dense)
+    except (VectorStoreError, GraphError):
+        _close_all(store, graph)
         raise
-    model_name = "none (bm25)" if mode == "bm25" else embedder.model_name
-    return (lambda question, k: retriever.retrieve(question, top_k=k)), model_name, store.close
+    model_name = f"none ({mode})" if mode in ("bm25", "graph") else embedder.model_name
+    return retrieve, model_name, lambda: _close_all(store, graph)
+
+
+def _plain(retriever) -> RetrieveFn:
+    return lambda question, k: retriever.retrieve(question, top_k=k)
+
+
+def _close_all(store: VectorStore, graph: GraphStore | None) -> None:
+    store.close()
+    if graph is not None:
+        graph.close()
+
+
+def hybrid_graph(dense, bm25, graph, candidates: int = DEFAULT_CANDIDATES) -> RetrieveFn:
+    def retrieve(question: str, k: int):
+        depth = max(candidates, k)
+        rankings = [ranker.retrieve(question, top_k=depth) for ranker in (dense, bm25, graph)]
+        return rrf_fuse(rankings)[:k]
+
+    return retrieve
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -81,12 +110,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         retrieve, model_name, close = build_retrieve_fn(args.mode)
-    except (EmbeddingError, VectorStoreError) as exc:
+    except (EmbeddingError, VectorStoreError, GraphError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     try:
         all_results = {name: run_evaluation(q, retrieve, max(ks)) for name, q in datasets.items()}
-    except (EmbeddingError, VectorStoreError) as exc:
+    except (EmbeddingError, VectorStoreError, GraphError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:
