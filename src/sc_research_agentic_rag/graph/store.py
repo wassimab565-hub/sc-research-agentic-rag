@@ -153,3 +153,6 @@ class GraphStore:
                 return session.run(query, **params).data()
         except (Neo4jError, DriverError) as exc:
             raise GraphError(f"Neo4j error: {exc}") from exc
+
+    def read(self, query: str, **params: Any) -> list[dict[str, Any]]:
+        return self._read(query, **params)
