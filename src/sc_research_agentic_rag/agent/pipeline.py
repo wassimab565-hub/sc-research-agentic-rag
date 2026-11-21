@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 
 from sc_research_agentic_rag.agent.decisions import MAX_ARG_CHARS, Decision, Step, parse_decision
+from sc_research_agentic_rag.agent.graph import AgentGraph
 from sc_research_agentic_rag.agent.prompts import RETRY_PROMPT, build_answer_messages, build_decision_messages
 from sc_research_agentic_rag.agent.tools import AgentTools
 from sc_research_agentic_rag.llm import ChatMessage, LLMClient
@@ -15,15 +16,6 @@ from sc_research_agentic_rag.rag import (
 )
 from sc_research_agentic_rag.retrieval import RetrievedChunk
 from sc_research_agentic_rag.storage import SearchFilter
-
-STOP_ANSWERED = "answered"
-STOP_MAX_STEPS = "max_steps"
-STOP_REPEATED = "repeated_action"
-STOP_RETRIEVAL_LIMIT = "retrieval_limit"
-STOP_EMPTY = "empty_results"
-STOP_INVALID = "invalid_decision"
-
-MAX_EMPTY_STREAK = 2
 
 
 @dataclass(frozen=True)
@@ -51,7 +43,7 @@ class AgentAnswer:
 
 
 class AgentPipeline:
-    """A bounded loop: the LLM picks one action per step, the tools run it, then one grounded answer is written."""
+    """A bounded LangGraph loop: the LLM picks one action per step, the tools run it, then one grounded answer is written."""
 
     def __init__(
         self,
@@ -70,48 +62,12 @@ class AgentPipeline:
         self._max_steps = max_steps
         self._max_retrievals = max_retrievals
         self._max_context_chars = max_context_chars
+        self._graph = AgentGraph(self._decide, tools.run, self._finish, max_steps, max_retrievals)
 
     def ask(self, question: str, filters: SearchFilter | None = None) -> AgentAnswer:
         if not question.strip():
             raise ValueError("question must not be empty")
-
-        steps: list[Step] = []
-        chunks: dict[str, RetrievedChunk] = {}
-        notes: list[str] = []
-        seen: set[str] = set()
-        retrievals = empty_streak = 0
-        stop = STOP_MAX_STEPS
-
-        while len(steps) < self._max_steps:
-            decision, valid = self._decide(question, steps)
-            if decision.action == "answer":
-                stop = STOP_ANSWERED if valid else STOP_INVALID
-                break
-            if decision.key in seen:
-                stop = STOP_REPEATED
-                break
-            if decision.action == "retrieve_evidence" and retrievals >= self._max_retrievals:
-                stop = STOP_RETRIEVAL_LIMIT
-                break
-
-            seen.add(decision.key)
-            result = self._tools.run(decision, filters)
-            steps.append(Step(len(steps) + 1, decision, result.summary, result.found))
-            if decision.action == "retrieve_evidence":
-                retrievals += 1
-            for chunk in result.chunks:
-                known = chunks.get(chunk.chunk_id)
-                if known is None or chunk.score > known.score:
-                    chunks[chunk.chunk_id] = chunk
-            if result.note and result.found:
-                notes.append(result.note)
-
-            empty_streak = 0 if result.found else empty_streak + 1
-            if empty_streak >= MAX_EMPTY_STREAK:
-                stop = STOP_EMPTY
-                break
-
-        return self._finish(question, steps, list(chunks.values()), notes, stop)
+        return self._graph.run(question, filters)
 
     def _decide(self, question: str, steps: list[Step]) -> tuple[Decision, bool]:
         """The next decision and whether it came from the LLM (False = the fallback was used)."""
