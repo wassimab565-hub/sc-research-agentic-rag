@@ -18,6 +18,7 @@ from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.retrieval import MODES, RetrievalSettings, build_retriever
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
+from sc_research_agentic_rag.verification import format_report, verify_citations
 
 def build_pipeline(
     max_steps: int, max_retrievals: int, top_k: int, score_threshold: float | None, mode: str
@@ -72,6 +73,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threshold", type=float, help="minimum similarity score (default: RAG_SCORE_THRESHOLD)")
     parser.add_argument("--show-trace", action="store_true", help="print the steps of the agent")
     parser.add_argument("--show-sources", action="store_true", help="print every retrieved passage")
+    parser.add_argument("--verify", action="store_true", help="check the citations of the answer")
     args = parser.parse_args(argv)
 
     settings = AgentSettings()
@@ -110,6 +112,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result.invalid_citations and not result.sources:
         numbers = ", ".join(f"[{n}]" for n in result.invalid_citations)
         print(f"Warning: the answer cites unknown sources: {numbers}")
+    if args.verify:
+        report = verify_citations(result.answer, [s.number for s in result.sources], _has_notes(result))
+        print("\n" + format_report(report))
     if args.show_trace:
         _print_trace(result)
     return 0
@@ -121,3 +126,6 @@ def _print_trace(result: AgentAnswer) -> None:
         print("  none")
     for step in result.trace:
         print(f"  {step.number}. {step.decision.action} {step.decision.args} -> {step.summary}")
+
+def _has_notes(result: AgentAnswer) -> bool:
+    return any(step.found and step.decision.action != "retrieve_evidence" for step in result.trace)

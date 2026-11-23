@@ -11,6 +11,7 @@ from sc_research_agentic_rag.rag.pipeline import RagAnswer, RagPipeline
 from sc_research_agentic_rag.retrieval import MODES, RetrievalSettings, build_retriever
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
+from sc_research_agentic_rag.verification import format_report, verify_citations
 
 def build_pipeline(
     top_k: int, max_context_chars: int, score_threshold: float | None, max_per_paper: int | None, mode: str
@@ -48,6 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-per-paper", type=int)
     parser.add_argument("--max-context-chars", type=int, default=DEFAULT_MAX_CONTEXT_CHARS)
     parser.add_argument("--show-sources", action="store_true", help="print every retrieved passage")
+    parser.add_argument("--verify", action="store_true", help="check the citations of the answer")
     args = parser.parse_args(argv)
 
     if not args.question.strip():
@@ -79,6 +81,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             store.close()
 
     _print_result(result, args.show_sources)
+    if args.verify:
+        print("\n" + format_report(verify_citations(result.answer, [s.number for s in result.sources])))
     return 0
 
 
