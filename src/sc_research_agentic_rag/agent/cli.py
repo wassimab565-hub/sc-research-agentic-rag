@@ -18,7 +18,7 @@ from sc_research_agentic_rag.rag.config import RagSettings
 from sc_research_agentic_rag.retrieval import MODES, RetrievalSettings, build_retriever
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
-from sc_research_agentic_rag.verification import format_report, verify_citations
+from sc_research_agentic_rag.verification import DEFAULT_THRESHOLD, build_report, build_support_embedder
 
 def build_pipeline(
     max_steps: int, max_retrievals: int, top_k: int, score_threshold: float | None, mode: str
@@ -74,6 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--show-trace", action="store_true", help="print the steps of the agent")
     parser.add_argument("--show-sources", action="store_true", help="print every retrieved passage")
     parser.add_argument("--verify", action="store_true", help="check the citations of the answer")
+    parser.add_argument("--support-threshold", type=float, default=DEFAULT_THRESHOLD, help="minimum claim support score for --verify")    
     args = parser.parse_args(argv)
 
     settings = AgentSettings()
@@ -88,6 +89,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--max-retrievals must be >= 1")
     if top_k < 1:
         parser.error("--top-k must be >= 1")
+    if not 0 <= args.support_threshold <= 1:
+        parser.error("--support-threshold must be between 0 and 1")
     try:
         filters = SearchFilter(
             paper_uids=args.paper, sources=args.source, year_min=args.year_min, year_max=args.year_max
@@ -113,8 +116,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         numbers = ", ".join(f"[{n}]" for n in result.invalid_citations)
         print(f"Warning: the answer cites unknown sources: {numbers}")
     if args.verify:
-        report = verify_citations(result.answer, [s.number for s in result.sources], _has_notes(result))
-        print("\n" + format_report(report))
+        report = build_report(
+            result.answer, result.sources, has_notes=_has_notes(result),
+            threshold=args.support_threshold, embedder_factory=build_support_embedder,
+        )
+        print("\n" + report)
     if args.show_trace:
         _print_trace(result)
     return 0

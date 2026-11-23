@@ -11,7 +11,7 @@ from sc_research_agentic_rag.rag.pipeline import RagAnswer, RagPipeline
 from sc_research_agentic_rag.retrieval import MODES, RetrievalSettings, build_retriever
 from sc_research_agentic_rag.storage import SearchFilter, VectorStore, VectorStoreError
 
-from sc_research_agentic_rag.verification import format_report, verify_citations
+from sc_research_agentic_rag.verification import DEFAULT_THRESHOLD, build_report, build_support_embedder
 
 def build_pipeline(
     top_k: int, max_context_chars: int, score_threshold: float | None, max_per_paper: int | None, mode: str
@@ -50,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-context-chars", type=int, default=DEFAULT_MAX_CONTEXT_CHARS)
     parser.add_argument("--show-sources", action="store_true", help="print every retrieved passage")
     parser.add_argument("--verify", action="store_true", help="check the citations of the answer")
+    parser.add_argument("--support-threshold", type=float, default=DEFAULT_THRESHOLD, help="minimum claim support score for --verify")
     args = parser.parse_args(argv)
 
     if not args.question.strip():
@@ -60,6 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--max-per-paper must be >= 1")
     if args.max_context_chars < 1:
         parser.error("--max-context-chars must be >= 1")
+    if not 0 <= args.support_threshold <= 1:
+        parser.error("--support-threshold must be between 0 and 1")
     try:
         filters = SearchFilter(
             paper_uids=args.paper, sources=args.source, year_min=args.year_min, year_max=args.year_max
@@ -82,7 +85,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _print_result(result, args.show_sources)
     if args.verify:
-        print("\n" + format_report(verify_citations(result.answer, [s.number for s in result.sources])))
+        report = build_report(
+            result.answer, result.sources,
+            threshold=args.support_threshold, embedder_factory=build_support_embedder,
+        )
+        print("\n" + report)
     return 0
 
 

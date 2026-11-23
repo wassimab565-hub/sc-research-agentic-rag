@@ -43,6 +43,15 @@ class Store:
     def close(self) -> None:
         pass
 
+class FakeSupportEmbedder:
+    def embed_passages(self, texts):
+        return [[1.0, 0.0] for _ in texts]
+
+
+@pytest.fixture(autouse=True)
+def fake_support_embedder(monkeypatch):
+    monkeypatch.setattr(rag_cli, "build_support_embedder", FakeSupportEmbedder)
+    monkeypatch.setattr(agent_cli, "build_support_embedder", FakeSupportEmbedder)
 
 @pytest.fixture
 def clean_env(monkeypatch):
@@ -57,6 +66,7 @@ def test_rag_cli_verify(monkeypatch, clean_env, capsys) -> None:
     out = capsys.readouterr().out
     assert "Verification: ok" in out
     assert "uncited sentences: 1/2" in out
+    assert "Claims (1): 1 supported" in out
 
 
 def test_rag_cli_without_verify_prints_no_report(monkeypatch, clean_env, capsys) -> None:
