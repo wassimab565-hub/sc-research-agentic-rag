@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from sc_research_agentic_rag.verification.citations import split_sentences
-from sc_research_agentic_rag.verification.claims import extract_claims, missing_numbers, strip_citations
+from sc_research_agentic_rag.verification.claims import (
+    extract_claims,
+    extract_numbers,
+    missing_numbers,
+    strip_citations,
+)
 
 # Provisional: not calibrated yet (the same warning as RAG_SCORE_THRESHOLD, I-4). Calibrate in 7.3.
 DEFAULT_THRESHOLD = 0.5
@@ -13,6 +18,7 @@ DEFAULT_THRESHOLD = 0.5
 STATUS_SUPPORTED = "supported"
 STATUS_WEAK = "weak"
 STATUS_NUMBER_MISSING = "number_missing"
+STATUS_MISATTRIBUTED = "misattributed"
 STATUS_NO_VALID_SOURCE = "no_valid_source"
 STATUS_UNCHECKED = "unchecked"
 
@@ -28,13 +34,17 @@ class PassageLike(Protocol):
 
 @dataclass(frozen=True)
 class ClaimCheck:
-    """status: supported | weak | number_missing | no_valid_source | unchecked (no embedder)."""
+    """status: supported | weak | misattributed | number_missing | no_valid_source | unchecked (no embedder).
+
+    misattributed: the numbers are not in the cited sources but are in other sources (found_in).
+    """
 
     text: str
     citations: tuple[int, ...]
     status: str
     support: float | None = None
     missing_numbers: tuple[str, ...] = ()
+    found_in: tuple[int, ...] = ()
 
 
 def passage_windows(text: str) -> list[str]:
@@ -72,14 +82,25 @@ def check_claims(
         support = scores.get(index)
         missing = missing_numbers(claim.text, [p.text for p in cited[index]])
         if missing:
-            status = STATUS_NUMBER_MISSING
-        elif support is None:
+            found_in = _found_elsewhere(missing, passages, claim.citations)
+            status = STATUS_MISATTRIBUTED if found_in else STATUS_NUMBER_MISSING
+            checks.append(ClaimCheck(claim.text, claim.citations, status, support, missing, found_in))
+            continue
+        if support is None:
             status = STATUS_UNCHECKED
         else:
             status = STATUS_SUPPORTED if support >= threshold else STATUS_WEAK
         checks.append(ClaimCheck(claim.text, claim.citations, status, support, missing))
     return checks
 
+def _found_elsewhere(
+    missing: Sequence[str], passages: Sequence[PassageLike], cited: Sequence[int]
+) -> tuple[int, ...]:
+    """Numbers of the other sources that contain the missing numbers; empty unless ALL of them are found there."""
+    others = {p.number: set(extract_numbers(p.text)) for p in passages if p.number not in cited}
+    if not set(missing) <= set().union(*others.values()):
+        return ()
+    return tuple(number for number, numbers in others.items() if numbers & set(missing))
 
 def _support_scores(
     texts: Sequence[str], cited: Sequence[Sequence[PassageLike]], embedder: SupportEmbedder

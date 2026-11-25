@@ -118,3 +118,28 @@ def test_build_report_survives_a_model_that_cannot_load() -> None:
     assert "Verification: ok" in text
     assert "1 number_missing" in text and "1 unchecked" in text
     assert "support score unavailable: no model" in text
+
+def test_number_found_in_another_source_is_misattributed() -> None:
+    sources = [passage(1, DOT), passage(2, "The vectors have 332 dimensions.")]
+    [check] = check_claims("The dot product has 332 dimensions [1].", sources, FakeEmbedder())
+    assert check.status == "misattributed"
+    assert (check.missing_numbers, check.found_in) == (("332",), (2,))
+
+
+def test_number_found_nowhere_stays_number_missing() -> None:
+    sources = [passage(1, DOT), passage(2, "The vectors have 331 dimensions.")]
+    [check] = check_claims("The dot product has 332 dimensions [1].", sources, FakeEmbedder())
+    assert (check.status, check.found_in) == ("number_missing", ())
+
+
+def test_numbers_only_partly_found_elsewhere_stay_number_missing() -> None:
+    sources = [passage(1, DOT), passage(2, "The vectors have 332 dimensions.")]
+    [check] = check_claims("The dot product has 332 or 777 dimensions [1].", sources, FakeEmbedder())
+    assert (check.status, check.found_in) == ("number_missing", ())
+
+
+def test_format_claims_says_where_the_numbers_are() -> None:
+    sources = [passage(1, DOT), passage(2, "The vectors have 332 dimensions.")]
+    text = format_claims(check_claims("The dot product has 332 dimensions [1].", sources, FakeEmbedder()))
+    assert text.splitlines()[0] == "Claims (1): 1 misattributed"
+    assert "(numbers 332 are in [2], not in the cited source)" in text

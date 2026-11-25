@@ -6,6 +6,7 @@ from sc_research_agentic_rag.embeddings import Embedder, EmbeddingError, Embeddi
 from sc_research_agentic_rag.verification.citations import format_report, verify_citations
 from sc_research_agentic_rag.verification.support import (
     DEFAULT_THRESHOLD,
+    STATUS_MISATTRIBUTED,
     STATUS_NO_VALID_SOURCE,
     STATUS_NUMBER_MISSING,
     STATUS_SUPPORTED,
@@ -17,7 +18,7 @@ from sc_research_agentic_rag.verification.support import (
     check_claims,
 )
 
-_ORDER = (STATUS_SUPPORTED, STATUS_WEAK, STATUS_NUMBER_MISSING, STATUS_NO_VALID_SOURCE, STATUS_UNCHECKED)
+_ORDER = (STATUS_SUPPORTED, STATUS_WEAK, STATUS_MISATTRIBUTED, STATUS_NUMBER_MISSING, STATUS_NO_VALID_SOURCE, STATUS_UNCHECKED)
 _SHOWN = 10
 
 
@@ -37,7 +38,10 @@ def format_claims(checks: Sequence[ClaimCheck]) -> str:
         score = f"{check.support:.2f} " if check.support is not None else ""
         text = check.text if len(check.text) <= 100 else check.text[:97].rstrip() + "..."
         line = f'  [{check.status}] {score}"{text}"'
-        if check.missing_numbers:
+        if check.status == STATUS_MISATTRIBUTED:
+            where = "".join(f"[{n}]" for n in check.found_in)
+            line += f" (numbers {', '.join(check.missing_numbers)} are in {where}, not in the cited source)"
+        elif check.missing_numbers:
             line += f" (not in the cited sources: {', '.join(check.missing_numbers)})"
         lines.append(line)
     if len(problems) > _SHOWN:

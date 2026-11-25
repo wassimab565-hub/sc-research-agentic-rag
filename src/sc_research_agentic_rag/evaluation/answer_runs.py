@@ -10,6 +10,7 @@ from sc_research_agentic_rag.evaluation.answers import AnswerCheck, aggregate_an
 from sc_research_agentic_rag.evaluation.models import EvalQuestion
 from sc_research_agentic_rag.verification import ClaimCheck, check_claims
 from sc_research_agentic_rag.verification.support import (
+    STATUS_MISATTRIBUTED,
     STATUS_NO_VALID_SOURCE,
     STATUS_NUMBER_MISSING,
     STATUS_SUPPORTED,
@@ -142,6 +143,7 @@ def aggregate_claims(claims: Sequence[ClaimCheck]) -> dict[str, float]:
     names = {
         STATUS_SUPPORTED: "supported_claim_rate",
         STATUS_WEAK: "weak_claim_rate",
+        STATUS_MISATTRIBUTED: "misattributed_claim_rate",
         STATUS_NUMBER_MISSING: "number_missing_claim_rate",
         STATUS_NO_VALID_SOURCE: "no_valid_source_claim_rate",
     }

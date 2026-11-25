@@ -112,7 +112,7 @@ def test_aggregate_claims_and_support_curve() -> None:
     ]
     metrics = aggregate_claims(claims)
     assert metrics == {
-        "supported_claim_rate": 0.25, "weak_claim_rate": 0.25,
+        "supported_claim_rate": 0.25, "weak_claim_rate": 0.25, "misattributed_claim_rate": 0.0,
         "number_missing_claim_rate": 0.25, "no_valid_source_claim_rate": 0.25,
     }
     assert support_curve(claims, [0.3, 0.5, 0.95]) == {0.3: 1.0, 0.5: 0.5, 0.95: 0.0}
