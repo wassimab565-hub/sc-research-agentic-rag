@@ -1,4 +1,8 @@
 import pytest
+import threading
+import time
+
+import sc_research_agentic_rag.api.app as app_module
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
@@ -149,3 +153,19 @@ def test_cli_rejects_invalid_port() -> None:
     with pytest.raises(SystemExit) as exc:
         cli.main(["--port", "0"])
     assert exc.value.code == 2
+
+
+class SlowGraphStore:
+    def counts(self):
+        threading.Event().wait(2)  # time.sleep is patched out by conftest
+        return {}
+
+
+def test_health_does_not_wait_for_a_service_that_hangs(monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "HEALTH_TIMEOUT", 0.2)
+    client, _ = client_for(graph=SlowGraphStore())
+    started = time.monotonic()
+    data = client.get("/health").json()
+    assert time.monotonic() - started < 1.5
+    assert data["graph"] == {"ok": False, "error": "no answer in 0.2s"}
+    assert data["status"] == "ok"

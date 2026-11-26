@@ -6,6 +6,10 @@ from typing import Any
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+
 from sc_research_agentic_rag.agent import AgentPipeline, AgentSettings, AgentTools
 from sc_research_agentic_rag.api.schemas import (
     AgentRequest,
@@ -72,6 +76,16 @@ def create_app(services: AppServices | None = None) -> FastAPI:
 
     @app.get("/health")
     def health(services: AppServices = Depends(get_services)) -> dict[str, Any]:
+        # Ollama and Neo4j are asked at the same time and share one deadline:
+        # a service that is down or hangs must not make the check slow.
+        deadline = time.monotonic() + HEALTH_TIMEOUT
+        pool = ThreadPoolExecutor(max_workers=2)
+        ollama_call = pool.submit(lambda: {"models": services.llm.list_models()})
+        graph_call = (
+            pool.submit(lambda: {"counts": services.graph.counts()}) if services.graph is not None else None
+        )
+        pool.shutdown(wait=False)
+
         if services.lock.acquire(blocking=False):  # never wait behind a long question
             try:
                 qdrant = _probe(lambda: {"chunks": services.store.count()})
@@ -79,11 +93,8 @@ def create_app(services: AppServices | None = None) -> FastAPI:
                 services.lock.release()
         else:
             qdrant = {"ok": True, "busy": True}
-        ollama = _probe(lambda: {"models": services.llm.list_models()})
-        if services.graph is None:
-            graph = {"ok": False, "error": "not configured"}
-        else:
-            graph = _probe(lambda: {"counts": services.graph.counts()})
+        ollama = _result(ollama_call, deadline)
+        graph = {"ok": False, "error": "not configured"} if graph_call is None else _result(graph_call, deadline)
         status = "ok" if qdrant["ok"] and ollama["ok"] else "degraded"
         return {"status": status, "default_mode": services.default_mode, "qdrant": qdrant, "ollama": ollama, "graph": graph}
 
@@ -207,6 +218,13 @@ def _probe(check) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - a health check must report, never crash
         return {"ok": False, "error": str(exc)}
 
+def _result(future: Future, deadline: float) -> dict[str, Any]:
+    try:
+        return {"ok": True, **future.result(timeout=max(0.0, deadline - time.monotonic()))}
+    except FutureTimeout:
+        return {"ok": False, "error": f"no answer in {HEALTH_TIMEOUT:g}s"}
+    except Exception as exc:  # noqa: BLE001 - a health check must report, never crash
+        return {"ok": False, "error": str(exc)}
 
 def _queries(services: AppServices) -> GraphQueries:
     if services.graph is None:
