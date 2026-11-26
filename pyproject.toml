@@ -22,6 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+api = ["fastapi>=0.165", "uvicorn>=0.54"]
 
 [project.scripts]
 sc-research = "sc_research_agentic_rag.main:main"
